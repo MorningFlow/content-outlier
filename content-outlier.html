@@ -1,0 +1,934 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Content Outlier</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,500;9..144,600&family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+  :root{
+    box-sizing:border-box;
+    --bg:#F6F5F1; --surface:#FFFFFF; --ink:#15171B; --ink-soft:#6B6E74;
+    --line:#E3E1DA; --line-strong:#C9C6BB;
+    --signal:#A15C0B; --signal-bg:#FBF1E3;
+    --accent:#1F3A5F; --accent-bg:#EDF1F6;
+    --radius:2px;
+    padding-top:env(safe-area-inset-top,0px);
+    padding-bottom:env(safe-area-inset-bottom,0px);
+  }
+  @media (prefers-color-scheme: dark){
+    :root:not([data-theme="light"]){
+      --bg:#121212; --surface:#181818; --ink:#EDECE8; --ink-soft:#9A9A96;
+      --line:#2A2A28; --line-strong:#39392f; --signal:#E0A458; --signal-bg:#2A2013;
+      --accent:#7FA8D8; --accent-bg:#1A2531;
+    }
+  }
+  :root[data-theme="dark"]{
+    --bg:#121212; --surface:#181818; --ink:#EDECE8; --ink-soft:#9A9A96;
+    --line:#2A2A28; --line-strong:#39392f; --signal:#E0A458; --signal-bg:#2A2013;
+    --accent:#7FA8D8; --accent-bg:#1A2531;
+  }
+  html{scroll-padding-top:env(safe-area-inset-top,0px);}
+  *{box-sizing:border-box;}
+  body{
+    margin:0; background:var(--bg); color:var(--ink);
+    font-family:'Inter',sans-serif; -webkit-font-smoothing:antialiased;
+    height:100%;
+  }
+  html,body{height:100%;}
+  .mono{font-family:'IBM Plex Mono',monospace; font-variant-numeric:tabular-nums;}
+  .serif{font-family:'Fraunces',serif;}
+  a{color:inherit;}
+  button{font-family:inherit; cursor:pointer;}
+
+  .app{display:flex; min-height:100%;}
+
+  /* Sidebar */
+  .sidebar{
+    width:216px; flex:none; background:var(--surface); border-right:1px solid var(--line);
+    padding:20px 16px; display:flex; flex-direction:column;
+    padding-top:calc(20px + env(safe-area-inset-top,0px));
+  }
+  .brand{font-size:13px; font-weight:700; letter-spacing:0.02em; margin:0 0 28px 2px;}
+  .nav{list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:2px;}
+  .nav button{
+    all:unset; display:block; width:100%; padding:8px 10px; font-size:13.5px;
+    color:var(--ink-soft); border-radius:var(--radius); border-left:2px solid transparent;
+  }
+  .nav button:hover{color:var(--ink); background:var(--bg);}
+  .nav button.active{color:var(--ink); font-weight:600; border-left:2px solid var(--accent); background:var(--accent-bg);}
+  .nav-divider{height:1px; background:var(--line); margin:12px 2px;}
+  .sidebar-foot{margin-top:auto; font-size:11.5px; color:var(--ink-soft); padding:2px;}
+
+  /* Main */
+  .main{flex:1; min-width:0; overflow-x:auto; padding:32px 40px 64px; max-width:1180px;}
+  .view{display:none;}
+  .view.active{display:block;}
+
+  h1.page-title{font-family:'Fraunces',serif; font-size:26px; font-weight:500; margin:0 0 6px;}
+  .page-sub{color:var(--ink-soft); font-size:13.5px; margin:0 0 28px; max-width:56ch; line-height:1.5;}
+
+  .metrics-row{display:grid; grid-template-columns:repeat(4,1fr); gap:1px; background:var(--line); border:1px solid var(--line); margin-bottom:36px;}
+  .metric{background:var(--surface); padding:16px 18px;}
+  .metric .label{font-size:11px; color:var(--ink-soft); text-transform:uppercase; letter-spacing:.06em; margin-bottom:8px;}
+  .metric .value{font-family:'Fraunces',serif; font-size:26px; font-weight:500;}
+
+  .section-head{display:flex; align-items:baseline; justify-content:space-between; margin-bottom:14px; gap:16px; flex-wrap:wrap;}
+  .section-head h2{font-size:15px; font-weight:600; margin:0;}
+  .toolbar{display:flex; gap:8px; align-items:center; flex-wrap:wrap;}
+  select, .btn, .search{
+    font-size:12.5px; border:1px solid var(--line-strong); background:var(--surface); color:var(--ink);
+    padding:7px 10px; border-radius:var(--radius);
+  }
+  .btn{font-weight:600; display:inline-flex; align-items:center; gap:6px; white-space:nowrap;}
+  .btn-primary{background:var(--ink); color:var(--surface); border-color:var(--ink);}
+  .btn-primary:hover{opacity:.88;}
+  .btn:not(.btn-primary):hover{border-color:var(--ink);}
+
+  /* Outlier cards */
+  .outlier-grid{display:grid; grid-template-columns:repeat(auto-fill,minmax(300px,1fr)); gap:20px;}
+  .outlier-card{background:var(--surface); border:1px solid var(--line); display:flex; flex-direction:column; transition:border-color .15s ease;}
+  .outlier-card:hover{border-color:var(--ink);}
+  .thumb{
+    aspect-ratio:9/13; position:relative; overflow:hidden; border-bottom:1px solid var(--line);
+    background-size:cover; background-position:center; background-color:#1c2530;
+  }
+  .player{
+    aspect-ratio:9/14; background:#000; border:1px solid var(--line); max-width:320px; overflow:hidden; position:relative;
+  }
+  .player video{
+    width:100%; height:100%; object-fit:cover; display:block;
+  }
+  .badge{
+    position:absolute; top:10px; left:10px; background:var(--signal); color:#fff;
+    font-family:'IBM Plex Mono',monospace; font-size:12px; font-weight:500; padding:4px 8px;
+    letter-spacing:.01em; z-index:2;
+  }
+  .card-body{padding:14px 16px 16px;}
+  .card-account{font-size:12.5px; font-weight:600; margin-bottom:6px;}
+  .card-stats{font-family:'IBM Plex Mono',monospace; font-size:11.5px; color:var(--ink-soft); margin-bottom:4px;}
+  .card-baseline{font-size:11px; color:var(--ink-soft); margin-bottom:10px;}
+  .card-baseline b{color:var(--ink); font-weight:600;}
+  .card-link{font-size:12px; font-weight:600; color:var(--accent); text-decoration:none; display:inline-flex; gap:4px;}
+  .card-link:hover{text-decoration:underline;}
+
+  /* Overview top outlier — larger, horizontal */
+  .hero-outlier{display:grid; grid-template-columns:170px 1fr; gap:0; border:1px solid var(--line); background:var(--surface); margin-bottom:14px;}
+  .hero-outlier .thumb{aspect-ratio:auto; height:100%; border-bottom:none; border-right:1px solid var(--line);}
+  .hero-body{padding:18px 20px; display:flex; flex-direction:column; justify-content:center; gap:8px;}
+  .hero-account{font-size:13.5px; font-weight:600;}
+  .hero-stats{font-family:'IBM Plex Mono',monospace; font-size:13px; color:var(--ink-soft);}
+  .hero-age{font-size:12px; color:var(--ink-soft);}
+
+  /* Table */
+  table{width:100%; border-collapse:collapse; background:var(--surface); border:1px solid var(--line); font-size:13px;}
+  th{text-align:left; font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); font-weight:600; padding:10px 14px; border-bottom:1px solid var(--line);}
+  td{padding:11px 14px; border-bottom:1px solid var(--line); vertical-align:middle;}
+  tr:last-child td{border-bottom:none;}
+  tr:hover td{background:var(--bg);}
+  .avatar{width:26px; height:26px; border-radius:50%; background:linear-gradient(140deg,#3a4a58,#1c2530); display:inline-block; vertical-align:middle; margin-right:10px;}
+  .row-user{display:flex; align-items:center;}
+  .status-dot{width:6px; height:6px; border-radius:50%; display:inline-block; margin-right:6px; background:#4C7A4C;}
+  .status-dot.paused{background:var(--ink-soft);}
+  .table-wrap{overflow-x:auto;}
+
+  /* Settings */
+  .settings-group{margin-bottom:32px; max-width:520px;}
+  .settings-group h3{font-size:12px; text-transform:uppercase; letter-spacing:.06em; color:var(--ink-soft); margin:0 0 12px; font-weight:600;}
+  .setting-row{display:flex; align-items:center; justify-content:space-between; padding:12px 0; border-bottom:1px solid var(--line);}
+  .setting-row:last-child{border-bottom:none;}
+  .setting-label{font-size:13.5px;}
+  .setting-help{font-size:11.5px; color:var(--ink-soft); margin-top:2px;}
+  .switch{width:34px; height:19px; border-radius:10px; background:var(--line-strong); position:relative; border:none; flex:none;}
+  .switch.on{background:var(--accent);}
+  .switch::after{content:"";position:absolute; width:15px; height:15px; border-radius:50%; background:#fff; top:2px; left:2px; transition:left .15s;}
+  .switch.on::after{left:17px;}
+
+  /* Modal */
+  .overlay{position:fixed; inset:0; background:rgba(10,10,10,.4); display:none; align-items:flex-start; justify-content:center; padding-top:12vh; z-index:50;}
+  .overlay.open{display:flex;}
+  .modal{background:var(--surface); border:1px solid var(--line); width:380px; max-width:90vw; padding:22px;}
+  .modal h3{font-size:14px; margin:0 0 4px;}
+  .modal p{font-size:12px; color:var(--ink-soft); margin:0 0 16px;}
+  .modal input{width:100%; padding:9px 10px; border:1px solid var(--line-strong); font-size:13px; margin-bottom:16px; font-family:'IBM Plex Mono',monospace;}
+  .modal-actions{display:flex; justify-content:flex-end; gap:8px;}
+
+  /* Content Analysis view */
+  .analysis-grid{display:grid; grid-template-columns:1.1fr 0.9fr; gap:28px;}
+  .player{aspect-ratio:9/14; background:linear-gradient(155deg,#26343f,#0e1418 65%); border:1px solid var(--line); max-width:300px;}
+  .analysis-link{font-size:12px; margin-top:10px; display:inline-block; color:var(--accent);}
+  .stat-list{display:flex; flex-direction:column; border:1px solid var(--line); background:var(--surface);}
+  .stat-list .row{display:flex; justify-content:space-between; padding:11px 14px; border-bottom:1px solid var(--line); font-size:13px;}
+  .stat-list .row:last-child{border-bottom:none;}
+  .stat-list .row span:last-child{font-family:'IBM Plex Mono',monospace;}
+  .transcript{font-size:12.5px; line-height:1.7; color:var(--ink-soft); border:1px solid var(--line); background:var(--surface); padding:14px 16px; margin-top:16px; max-height:160px; overflow-y:auto;}
+  .transcript .ts{font-family:'IBM Plex Mono',monospace; color:var(--ink); font-size:11px; margin-right:8px;}
+  .breakdown{margin-top:28px;}
+  .breakdown-grid{display:grid; grid-template-columns:repeat(2,1fr); gap:1px; background:var(--line); border:1px solid var(--line);}
+  .breakdown-item{background:var(--surface); padding:14px 16px;}
+  .breakdown-item .label{font-size:11px; text-transform:uppercase; letter-spacing:.05em; color:var(--ink-soft); margin-bottom:6px;}
+  .breakdown-item p{margin:0; font-size:13px; line-height:1.5;}
+  .cta-row{margin-top:24px; padding-top:20px; border-top:1px solid var(--line);}
+  .cta-row .btn-primary{padding:10px 16px;}
+  .back-link{font-size:12px; color:var(--ink-soft); margin-bottom:16px; display:inline-block;}
+  .back-link:hover{color:var(--ink);}
+
+  .stub{color:var(--ink-soft); font-size:13px; border:1px dashed var(--line-strong); padding:40px; text-align:center;}
+
+  /* Content Library Badges & Table */
+  .badge-outlier-sm{background:var(--signal); color:#fff; font-family:'IBM Plex Mono',monospace; font-size:11px; padding:2px 6px; font-weight:600; border-radius:var(--radius); display:inline-block; white-space:nowrap;}
+  .badge-baseline-sm{background:var(--line); color:var(--ink-soft); font-family:'IBM Plex Mono',monospace; font-size:11px; padding:2px 6px; border-radius:var(--radius); display:inline-block; white-space:nowrap;}
+  .lib-thumb{width:36px; height:50px; border-radius:2px; position:relative; cursor:pointer; background:#1c2530; display:flex; align-items:center; justify-content:center; border:1px solid var(--line); flex:none; overflow:hidden;}
+  .lib-thumb:hover .lib-play-icon{transform:scale(1.2); opacity:1;}
+  .lib-play-icon{color:#fff; font-size:11px; opacity:0.85; transition:transform .15s, opacity .15s; text-shadow:0 1px 3px rgba(0,0,0,0.85);}
+  .lib-caption{max-width:320px; font-size:12.5px; line-height:1.4; color:var(--ink); cursor:pointer; text-overflow:ellipsis; overflow:hidden; white-space:nowrap;}
+  .lib-caption:hover{color:var(--accent); text-decoration:underline;}
+  .lib-action-btn{font-size:11.5px; font-weight:600; color:var(--accent); text-decoration:none; margin-right:10px; display:inline-block;}
+  .lib-action-btn:hover{text-decoration:underline;}
+  .lib-action-ig{font-size:11.5px; color:var(--ink-soft); text-decoration:none; display:inline-block;}
+  .lib-action-ig:hover{color:var(--ink); text-decoration:underline;}
+
+  @media (max-width:860px){
+    .app{flex-direction:column;}
+    .sidebar{width:100%; flex-direction:row; align-items:center; padding:12px 16px; overflow-x:auto;}
+    .brand{margin:0 20px 0 0;}
+    .nav{flex-direction:row;}
+    .nav-divider{display:none;}
+    .sidebar-foot{display:none;}
+    .main{padding:24px 18px 48px;}
+    .metrics-row{grid-template-columns:repeat(2,1fr);}
+    .hero-outlier{grid-template-columns:120px 1fr;}
+    .analysis-grid{grid-template-columns:1fr;}
+  }
+</style>
+</head>
+<body>
+<div class="app">
+
+  <nav class="sidebar">
+    <div class="brand">CONTENT OUTLIER</div>
+    <ul class="nav">
+      <li><button class="active" data-view="overview">Overview</button></li>
+      <li><button data-view="competitors">Competitors</button></li>
+      <li><button data-view="outliers">Outliers</button></li>
+      <li><button data-view="library">Content Library</button></li>
+    </ul>
+    <div class="nav-divider"></div>
+    <ul class="nav">
+      <li><button data-view="settings">Settings</button></li>
+    </ul>
+    <div class="sidebar-foot">v1.0 · MVP</div>
+  </nav>
+
+  <main class="main">
+
+    <!-- OVERVIEW -->
+    <section class="view active" id="view-overview">
+      <h1 class="page-title">Content Overview</h1>
+      <p class="page-sub">Monitor competitor content and identify posts performing significantly above their normal baseline.</p>
+
+      <div class="metrics-row">
+        <div class="metric"><div class="label">Competitors</div><div class="value mono">3</div></div>
+        <div class="metric"><div class="label">Content Tracked</div><div class="value mono">6</div></div>
+        <div class="metric"><div class="label">Outliers Found</div><div class="value mono">3</div></div>
+        <div class="metric"><div class="label">Last Updated</div><div class="value mono" style="font-size:18px;">1h ago</div></div>
+      </div>
+
+      <div class="section-head"><h2>Top Outliers</h2></div>
+
+      <div class="hero-outlier">
+        <div class="thumb" style="background-image:url('/media/thumbnails/hormozi_outlier.jpg');background-size:cover;background-position:center;">
+          <span class="badge">18.2× OUTLIER</span>
+        </div>
+        <div class="hero-body">
+          <div class="hero-account">@hormozi</div>
+          <div class="hero-stats">7.65M views · 482K likes · 14.2K comments</div>
+          <div class="hero-age">Posted 8 days ago</div>
+          <a class="card-link" href="#" onclick="openAnalysis(event)">View Analysis →</a>
+        </div>
+      </div>
+
+      <div class="outlier-grid" style="margin-top:18px;">
+        <article class="outlier-card">
+          <div class="thumb" style="background-image:url('/media/thumbnails/aiwithanushka_outlier.jpg');background-size:cover;background-position:center;">
+            <span class="badge">13.6× OUTLIER</span>
+          </div>
+          <div class="card-body">
+            <div class="card-account">@aiwithanushka</div>
+            <div class="card-stats">190K views · 18.2K likes · 890 comments</div>
+            <div class="card-baseline">Account baseline: <b>14K</b></div>
+            <a class="card-link" href="#" onclick="openAnalysis(event)">View Analysis →</a>
+          </div>
+        </article>
+        <article class="outlier-card">
+          <div class="thumb" style="background-image:url('/media/thumbnails/swastik.nandakumar_outlier.jpg');background-size:cover;background-position:center;">
+            <span class="badge">12.4× OUTLIER</span>
+          </div>
+          <div class="card-body">
+            <div class="card-account">@swastik.nandakumar</div>
+            <div class="card-stats">272K views · 14.8K likes · 1.9K comments</div>
+            <div class="card-baseline">Account baseline: <b>22K</b></div>
+            <a class="card-link" href="#" onclick="openAnalysis(event)">View Analysis →</a>
+          </div>
+        </article>
+      </div>
+    </section>
+
+    <!-- COMPETITORS -->
+    <section class="view" id="view-competitors">
+      <h1 class="page-title">Competitors</h1>
+      <p class="page-sub">Manage the Instagram accounts Content Outlier monitors.</p>
+      <div class="section-head">
+        <span></span>
+        <button class="btn btn-primary" onclick="toggleModal(true)">+ Add Competitor</button>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>Account</th><th>Followers</th><th>Content Tracked</th><th>Last Scanned</th><th>Status</th><th></th></tr></thead>
+          <tbody id="competitor-rows"></tbody>
+        </table>
+      </div>
+    </section>
+
+    <!-- OUTLIERS -->
+    <section class="view" id="view-outliers">
+      <h1 class="page-title">Outliers</h1>
+      <p class="page-sub">Content performing well beyond its account's normal baseline, ranked by outlier score.</p>
+      <div class="section-head">
+        <div class="toolbar">
+          <select id="filter-competitor" onchange="loadOutliers()"><option value="">All Competitors</option></select>
+          <select id="filter-range" onchange="loadOutliers()"><option value="30d">Last 30 days</option><option value="7d">Last 7 days</option><option value="90d">Last 90 days</option><option value="all">All time</option></select>
+        </div>
+        <div class="toolbar">
+          <span style="font-size:12px; color:var(--ink-soft);">Sort by</span>
+          <select id="filter-sort" onchange="loadOutliers()"><option value="score">Outlier Score</option><option value="views">Views</option><option value="velocity">Velocity</option></select>
+        </div>
+      </div>
+      <div class="outlier-grid" id="outlier-feed"></div>
+    </section>
+
+    <!-- CONTENT ANALYSIS -->
+    <section class="view" id="view-analysis">
+      <a href="#" class="back-link" onclick="switchView(event,'outliers')">← Back to Outliers</a>
+      <h1 class="page-title" style="margin-bottom:2px;">18.4× Outlier</h1>
+      <p class="page-sub" style="margin-bottom:24px;">@moveperformance · Posted 9 days ago</p>
+
+      <div class="analysis-grid">
+        <div>
+          <div class="player"></div>
+          <a class="analysis-link" href="#">View on Instagram ↗</a>
+          <div class="transcript">
+            <div><span class="ts">0:00</span>Most people warm up their shoulders wrong before pressing.</div>
+            <div><span class="ts">0:04</span>Here's the three-second fix I give every client.</div>
+            <div><span class="ts">0:11</span>Do this before your next upper body session.</div>
+          </div>
+        </div>
+        <div>
+          <div class="stat-list">
+            <div class="row"><span>Outlier Score</span><span>18.4×</span></div>
+            <div class="row"><span>Views</span><span>842,000</span></div>
+            <div class="row"><span>Account Baseline</span><span>45,000</span></div>
+            <div class="row"><span>Likes</span><span>42,000</span></div>
+            <div class="row"><span>Comments</span><span>1,800</span></div>
+            <div class="row"><span>Content Age</span><span>9 days</span></div>
+          </div>
+
+          <div class="breakdown">
+            <div class="section-head"><h2>Content Breakdown</h2></div>
+            <div class="breakdown-grid">
+              <div class="breakdown-item"><div class="label">Hook</div><p>Names a common mistake, then promises a fast fix.</p></div>
+              <div class="breakdown-item"><div class="label">Topic</div><p>Shoulder mobility before pressing movements.</p></div>
+              <div class="breakdown-item"><div class="label">Format</div><p>Talking-head demo, single continuous take.</p></div>
+              <div class="breakdown-item"><div class="label">CTA</div><p>Save this before your next workout.</p></div>
+            </div>
+            <div class="breakdown-item" style="border:1px solid var(--line); margin-top:1px;">
+              <div class="label">Key Takeaways</div>
+              <p>Specific, correctable mistake + immediate demonstration outperforms general advice.</p>
+            </div>
+          </div>
+
+          <div class="cta-row">
+            <button class="btn btn-primary">Create My Version →</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- CONTENT LIBRARY -->
+    <section class="view" id="view-library">
+      <h1 class="page-title">Content Library</h1>
+      <p class="page-sub">Every tracked competitor Reel — searchable, filterable, and sorted across 30, 60, and 90‑day horizons.</p>
+
+      <div class="section-head" style="margin-bottom:12px;">
+        <div class="toolbar" style="flex-wrap:wrap; gap:8px; width:100%;">
+          <input class="search" id="lib-search" type="search" placeholder="Search captions…" style="flex:1; min-width:180px; max-width:320px;" oninput="debouncedLibLoad()">
+          <select id="lib-competitor" onchange="loadLibrary()"><option value="">All Competitors</option></select>
+          <select id="lib-range" onchange="loadLibrary()">
+            <option value="30d">Last 30 Days</option>
+            <option value="60d">Last 60 Days</option>
+            <option value="90d" selected>Last 90 Days</option>
+            <option value="all">All Time</option>
+          </select>
+          <select id="lib-sort" onchange="loadLibrary()">
+            <option value="published">Newest First</option>
+            <option value="views">Most Views</option>
+            <option value="score">Outlier Score</option>
+            <option value="likes">Most Likes</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="table-wrap" id="lib-table-wrap">
+        <table id="lib-table">
+          <thead>
+            <tr>
+              <th style="width:44px;"></th>
+              <th>Account</th>
+              <th>Caption</th>
+              <th>Age</th>
+              <th class="mono">Views</th>
+              <th class="mono">Likes</th>
+              <th class="mono">Comments</th>
+              <th>Score</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody id="lib-rows"></tbody>
+        </table>
+      </div>
+      <div id="lib-pagination" style="display:flex; gap:8px; align-items:center; margin-top:14px; font-size:12.5px; color:var(--ink-soft);"></div>
+      <div id="lib-empty" class="stub" style="display:none;">No content found for the selected filters.</div>
+    </section>
+
+    <!-- SETTINGS -->
+    <section class="view" id="view-settings">
+      <h1 class="page-title">Settings</h1>
+
+      <div class="settings-group">
+        <h3>Scraping</h3>
+        <div class="setting-row">
+          <div><div class="setting-label">Scan frequency</div><div class="setting-help">How often competitor accounts are checked for new content.</div></div>
+          <select><option>Every 6 hours</option><option>Every 12 hours</option><option>Daily</option></select>
+        </div>
+        <div class="setting-row">
+          <div><div class="setting-label">Automatically download new content</div><div class="setting-help">Saves outlier videos locally as they're detected.</div></div>
+          <button class="switch on" onclick="this.classList.toggle('on')"></button>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h3>Display</h3>
+        <div class="setting-row">
+          <div class="setting-label">Default sorting</div>
+          <select><option>Outlier Score</option><option>Views</option><option>Velocity</option></select>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">Default time range</div>
+          <select><option>Last 30 days</option><option>Last 7 days</option><option>Last 90 days</option></select>
+        </div>
+      </div>
+
+      <div class="settings-group">
+        <h3>Account</h3>
+        <div class="setting-row">
+          <div><div class="setting-label">Rishi Sharma</div><div class="setting-help">rishi@mytaskengine.com</div></div>
+          <button class="btn">Edit</button>
+        </div>
+        <div class="setting-row">
+          <div class="setting-label">Log out</div>
+          <button class="btn">Log out</button>
+        </div>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<div class="overlay" id="modal-overlay">
+  <div class="modal">
+    <h3>Add Competitor</h3>
+    <p>Track a new Instagram account.</p>
+    <input type="text" id="new-competitor-username" placeholder="@username">
+    <div class="modal-actions">
+      <button class="btn" onclick="toggleModal(false)">Cancel</button>
+      <button class="btn btn-primary" id="btn-submit-competitor" onclick="submitNewCompetitor()">Add Competitor</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  const API_BASE = window.location.protocol.startsWith('http') ? window.location.origin : 'http://localhost:8000';
+
+  // ── Universal number formatter ────────────────────────────────────────────
+  function formatMetric(num) {
+    if (num === null || num === undefined || isNaN(num)) return '—';
+    const abs = Math.abs(num);
+    if (abs >= 1_000_000_000) return (num / 1_000_000_000).toFixed(2).replace(/\.?0+$/, '') + 'B';
+    if (abs >= 1_000_000)     return (num / 1_000_000).toFixed(2).replace(/\.?0+$/, '') + 'M';
+    if (abs >= 10_000)        return (num / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+    if (abs >= 1_000)         return (num / 1_000).toFixed(1).replace(/\.0$/, '') + 'K';
+    return num.toLocaleString();
+  }
+
+  let currentCompetitors = [];
+  let currentOutliers = [];
+
+  async function loadDashboard() {
+    try {
+      const res = await fetch(`${API_BASE}/dashboard`);
+      if (!res.ok) throw new Error('Dashboard offline');
+      const data = await res.json();
+      
+      const metrics = document.querySelectorAll('#view-overview .metric .value');
+      if (metrics.length >= 4) {
+        metrics[0].textContent = data.competitors_count;
+        metrics[1].textContent = formatMetric(data.content_tracked_count);
+        metrics[2].textContent = data.outliers_found_count;
+        metrics[3].textContent = data.last_updated_human;
+      }
+
+      if (data.top_outlier) {
+        renderHeroOutlier(data.top_outlier);
+      }
+    } catch (e) {
+      console.log('Using default dashboard values', e);
+    }
+  }
+
+  function renderHeroOutlier(item) {
+    const hero = document.querySelector('.hero-outlier');
+    if (!hero) return;
+    hero.innerHTML = `
+      <div class="thumb" style="${item.thumbnail_url ? `background-image:url(${item.thumbnail_url});background-size:cover;` : ''}">
+        <span class="badge">${item.outlier_score}× OUTLIER</span>
+      </div>
+      <div class="hero-body">
+        <div class="hero-account">@${item.username}</div>
+        <div class="hero-stats">${formatMetric(item.view_count)} views · ${formatMetric(item.like_count)} likes · ${formatMetric(item.comment_count)} comments</div>
+        <div class="hero-age">Posted ${item.age_days} days ago</div>
+        <a class="card-link" href="#" onclick="openAnalysisById(event, '${item.id}')">View Analysis →</a>
+      </div>
+    `;
+  }
+
+  async function loadCompetitors() {
+    const rows = document.getElementById('competitor-rows');
+    try {
+      const res = await fetch(`${API_BASE}/competitors`);
+      if (!res.ok) throw new Error('Failed to load competitors');
+      currentCompetitors = await res.json();
+      rows.innerHTML = '';
+      currentCompetitors.forEach(c => {
+        const tr = document.createElement('tr');
+        const followers = formatMetric(c.followers);
+        const scanned = c.last_scraped_at ? new Date(c.last_scraped_at).toLocaleDateString() : 'Pending';
+        tr.innerHTML = `
+          <td><span class="row-user"><span class="avatar" style="${c.profile_image ? `background-image:url(${c.profile_image});background-size:cover;` : ''}"></span>@${c.username}</span></td>
+          <td class="mono">${followers}</td>
+          <td class="mono">${c.content_count || 0}</td>
+          <td class="mono">${scanned}</td>
+          <td><span class="status-dot ${c.status === 'paused' ? 'paused' : ''}"></span>${c.status.charAt(0).toUpperCase() + c.status.slice(1)}</td>
+          <td style="color:var(--ink-soft); font-size:12px;">
+            <a href="#" onclick="triggerSync(event, '${c.id}')" style="color:var(--accent); text-decoration:none; margin-right:8px;">Sync</a>
+            <a href="#" onclick="deleteCompetitor(event, '${c.id}')" style="color:var(--ink-soft); text-decoration:none;">Remove</a>
+          </td>
+        `;
+        rows.appendChild(tr);
+      });
+
+      // Populate competitor filter dropdowns (outliers + library)
+      const compSelect = document.getElementById('filter-competitor');
+      const libComp = document.getElementById('lib-competitor');
+      const currentVal = compSelect?.value || '';
+      if (compSelect) {
+        compSelect.innerHTML = '<option value="">All Competitors</option>';
+        currentCompetitors.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.username;
+          opt.textContent = `@${c.username}`;
+          compSelect.appendChild(opt);
+        });
+        compSelect.value = currentVal;
+      }
+      if (libComp) {
+        const prevLib = libComp.value;
+        libComp.innerHTML = '<option value="">All Competitors</option>';
+        currentCompetitors.forEach(c => {
+          const opt = document.createElement('option');
+          opt.value = c.username;
+          opt.textContent = `@${c.username}`;
+          libComp.appendChild(opt);
+        });
+        libComp.value = prevLib;
+      }
+    } catch (e) {
+      console.log('Rendering fallback mock competitors', e);
+      renderFallbackCompetitors();
+    }
+  }
+
+  function renderFallbackCompetitors() {
+    const competitors = [
+      ['@hormozi','5.1M','2','1h ago','active'],
+      ['@swastik.nandakumar','74.5K','2','2h ago','active'],
+      ['@aiwithanushka','38.2K','2','3h ago','active'],
+    ];
+    const rows = document.getElementById('competitor-rows');
+    rows.innerHTML = '';
+    competitors.forEach(c => {
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td><span class="row-user"><span class="avatar"></span>${c[0]}</span></td>
+        <td class="mono">${c[1]}</td><td class="mono">${c[2]}</td><td class="mono">${c[3]}</td>
+        <td><span class="status-dot ${c[4]==='paused'?'paused':''}"></span>${c[4]==='paused'?'Paused':'Active'}</td>
+        <td style="color:var(--ink-soft); font-size:12px;">Sync · Remove</td>`;
+      rows.appendChild(tr);
+    });
+  }
+
+  async function loadOutliers() {
+    const feed = document.getElementById('outlier-feed');
+    const compFilter = document.getElementById('filter-competitor')?.value || '';
+    const rangeFilter = document.getElementById('filter-range')?.value || '30d';
+    const sortFilter = document.getElementById('filter-sort')?.value || 'score';
+
+    try {
+      let url = `${API_BASE}/outliers?range=${rangeFilter}&sort=${sortFilter}&limit=20`;
+      if (compFilter) url += `&competitor=${encodeURIComponent(compFilter)}`;
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Outliers endpoint failed');
+      const data = await res.json();
+      currentOutliers = data.items || [];
+      if (currentOutliers.length === 0) {
+        feed.innerHTML = '<div class="stub" style="grid-column: 1 / -1;">No outliers found for the selected filter criteria.</div>';
+        return;
+      }
+      feed.innerHTML = '';
+      currentOutliers.forEach(o => {
+        const el = document.createElement('article');
+        el.className = 'outlier-card';
+        el.innerHTML = `
+          <div class="thumb" style="${o.thumbnail_url ? `background-image:url(${o.thumbnail_url});background-size:cover;` : ''}">
+            <span class="badge">${o.outlier_score}× OUTLIER</span>
+          </div>
+          <div class="card-body">
+            <div class="card-account">@${o.username}</div>
+            <div class="card-stats">${formatMetric(o.view_count)} views · ${formatMetric(o.like_count)} likes</div>
+            <div class="card-baseline">Account baseline: <b>${formatMetric(o.baseline_views)}</b></div>
+            <div class="hero-age" style="margin-bottom:8px;">Posted ${o.age_days} days ago</div>
+            <a class="card-link" href="#" onclick="openAnalysisById(event, '${o.id}')">View Analysis →</a>
+          </div>
+        `;
+        feed.appendChild(el);
+      });
+    } catch (e) {
+      console.log('Rendering fallback mock outliers', e);
+      renderFallbackOutliers();
+    }
+  }
+
+  function renderFallbackOutliers() {
+    const outliers = [
+      ['18.2×','@hormozi','7.65M views','420K','8 days ago'],
+      ['13.6×','@aiwithanushka','190K views','14K','6 days ago'],
+      ['12.4×','@swastik.nandakumar','272K views','22K','5 days ago'],
+    ];
+    const feed = document.getElementById('outlier-feed');
+    feed.innerHTML = '';
+    outliers.forEach(o => {
+      const el = document.createElement('article');
+      el.className = 'outlier-card';
+      el.innerHTML = `<div class="thumb"><span class="badge">${o[0]} OUTLIER</span></div>
+        <div class="card-body">
+          <div class="card-account">${o[1]}</div>
+          <div class="card-stats">${o[2]}</div>
+          <div class="card-baseline">Account baseline: <b>${o[3]}</b></div>
+          <div class="hero-age" style="margin-bottom:8px;">Posted ${o[4]}</div>
+          <a class="card-link" href="#" onclick="openAnalysis(event)">View Analysis →</a>
+        </div>`;
+      feed.appendChild(el);
+    });
+  }
+
+  async function submitNewCompetitor() {
+    const input = document.getElementById('new-competitor-username');
+    const username = input.value.trim();
+    if (!username) return;
+
+    const btn = document.getElementById('btn-submit-competitor');
+    btn.disabled = true;
+    btn.textContent = 'Adding...';
+
+    try {
+      const res = await fetch(`${API_BASE}/competitors`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ username })
+      });
+      if (!res.ok) {
+        const err = await res.json();
+        alert('Error adding competitor: ' + (err.detail || 'Unknown error'));
+      } else {
+        input.value = '';
+        toggleModal(false);
+        await loadCompetitors();
+        await loadDashboard();
+      }
+    } catch (e) {
+      alert('Could not connect to backend server: ' + e.message);
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Add Competitor';
+    }
+  }
+
+  async function triggerSync(e, id) {
+    e.preventDefault();
+    try {
+      const res = await fetch(`${API_BASE}/competitors/${id}/sync`, { method: 'POST' });
+      if (res.ok) {
+        alert('Sync job queued successfully!');
+        loadCompetitors();
+      }
+    } catch (err) {
+      alert('Sync failed: ' + err.message);
+    }
+  }
+
+  async function deleteCompetitor(e, id) {
+    e.preventDefault();
+    if (!confirm('Are you sure you want to stop tracking this competitor?')) return;
+    try {
+      const res = await fetch(`${API_BASE}/competitors/${id}`, { method: 'DELETE' });
+      if (res.ok) {
+        loadCompetitors();
+        loadDashboard();
+      }
+    } catch (err) {
+      alert('Delete failed: ' + err.message);
+    }
+  }
+
+  async function openAnalysisById(e, contentId) {
+    if (e) e.preventDefault();
+    try {
+      const res = await fetch(`${API_BASE}/content/${contentId}`);
+      if (!res.ok) throw new Error('Content detail failed');
+      const item = await res.json();
+      
+      const view = document.getElementById('view-analysis');
+      view.querySelector('.page-title').textContent = `${item.outlier_score}× Outlier`;
+      view.querySelector('.page-sub').textContent = `@${item.instagram_username} · Posted ${new Date(item.published_at).toLocaleDateString()}`;
+      
+      const link = view.querySelector('.analysis-link');
+      link.href = item.instagram_url;
+
+      // Inject Real HTML5 Video Player
+      const playerEl = view.querySelector('.player');
+      if (playerEl) {
+        // Always resolve media paths against API_BASE so the browser fetches
+        // them from the FastAPI /media static mount, not the page's own origin
+        // (which may differ when the HTML is opened directly as a file://).
+        const resolveMediaUrl = (path) => {
+          if (!path) return null;
+          if (path.startsWith('http://') || path.startsWith('https://')) return path;
+          return API_BASE + (path.startsWith('/') ? path : '/' + path);
+        };
+        const rawVideo = item.video_url || item.video_path || '/media/videos/hormozi/outlier_reel.mp4';
+        const videoSrc = resolveMediaUrl(rawVideo);
+        const posterSrc = resolveMediaUrl(item.thumbnail_url) || '';
+        playerEl.innerHTML = `
+          <video src="${videoSrc}" poster="${posterSrc}" controls autoplay muted loop playsinline style="width:100%;height:100%;object-fit:cover;display:block;">
+            Your browser does not support HTML5 video.
+          </video>
+        `;
+      }
+
+      const statRows = view.querySelectorAll('.stat-list .row span:last-child');
+      if (statRows.length >= 6) {
+        statRows[0].textContent = `${item.outlier_score}×`;
+        statRows[1].textContent = formatMetric(item.view_count);
+        const baseViews = item.outlier_reasons ? item.outlier_reasons.account_baseline_views : null;
+        statRows[2].textContent = formatMetric(baseViews);
+        statRows[3].textContent = formatMetric(item.like_count);
+        statRows[4].textContent = formatMetric(item.comment_count);
+        statRows[5].textContent = item.outlier_reasons ? `${item.outlier_reasons.age_days} days` : 'Recent';
+      }
+
+      if (item.transcript) {
+        if (item.transcript.segments && item.transcript.segments.length > 0) {
+          const transcriptEl = view.querySelector('.transcript');
+          transcriptEl.innerHTML = item.transcript.segments.map(s => {
+            const mins = Math.floor(s.start / 60);
+            const secs = Math.floor(s.start % 60).toString().padStart(2, '0');
+            return `<div><span class="ts">${mins}:${secs}</span>${s.text}</div>`;
+          }).join('');
+        }
+
+        const breakdownParas = view.querySelectorAll('.breakdown-item p');
+        if (breakdownParas.length >= 5) {
+          if (item.transcript.breakdown_hook) breakdownParas[0].textContent = item.transcript.breakdown_hook;
+          if (item.transcript.breakdown_topic) breakdownParas[1].textContent = item.transcript.breakdown_topic;
+          if (item.transcript.breakdown_format) breakdownParas[2].textContent = item.transcript.breakdown_format;
+          if (item.transcript.breakdown_cta) breakdownParas[3].textContent = item.transcript.breakdown_cta;
+          if (item.transcript.key_takeaways) breakdownParas[4].textContent = item.transcript.key_takeaways;
+        }
+      }
+
+      openAnalysis(e);
+    } catch (err) {
+      console.log('Error opening dynamic analysis, falling back to static view', err);
+      openAnalysis(e);
+    }
+  }
+
+  function switchView(e, name){
+    if(e) e.preventDefault();
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-'+name).classList.add('active');
+    document.querySelectorAll('.nav button').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
+    window.scrollTo(0,0);
+    if (name === 'library') { libPage = 1; loadLibrary(); }
+  }
+  document.querySelectorAll('.nav button[data-view]').forEach(b=>{
+    b.addEventListener('click', ()=>switchView(null, b.dataset.view));
+  });
+
+  function openAnalysis(e){
+    if (e) e.preventDefault();
+    document.querySelectorAll('.view').forEach(v=>v.classList.remove('active'));
+    document.getElementById('view-analysis').classList.add('active');
+    document.querySelectorAll('.nav button').forEach(b=>b.classList.remove('active'));
+    window.scrollTo(0,0);
+  }
+
+  function toggleModal(open){
+    document.getElementById('modal-overlay').classList.toggle('open', open);
+  }
+
+  // ── Content Library ───────────────────────────────────────────────────────
+  let libPage = 1;
+  const LIB_LIMIT = 50;
+  let libDebounceTimer = null;
+
+  function debouncedLibLoad() {
+    clearTimeout(libDebounceTimer);
+    libDebounceTimer = setTimeout(() => { libPage = 1; loadLibrary(); }, 320);
+  }
+
+  function relativeAge(dateStr) {
+    const pub = new Date(dateStr);
+    const diff = Math.floor((Date.now() - pub) / 86400000);
+    if (diff === 0) return 'Today';
+    if (diff === 1) return '1d ago';
+    return diff + 'd ago';
+  }
+
+  async function loadLibrary() {
+    const tbody = document.getElementById('lib-rows');
+    const emptyEl = document.getElementById('lib-empty');
+    const tableWrap = document.getElementById('lib-table-wrap');
+    const paginationEl = document.getElementById('lib-pagination');
+
+    const search = document.getElementById('lib-search')?.value?.trim() || '';
+    const competitor = document.getElementById('lib-competitor')?.value || '';
+    const range = document.getElementById('lib-range')?.value || '90d';
+    const sort = document.getElementById('lib-sort')?.value || 'published';
+
+    tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:24px; color:var(--ink-soft); font-size:12.5px;">Loading…</td></tr>';
+    emptyEl.style.display = 'none';
+    tableWrap.style.display = 'block';
+
+    try {
+      let url = `${API_BASE}/content?range=${range}&sort=${sort}&order=desc&page=${libPage}&limit=${LIB_LIMIT}`;
+      if (competitor) url += `&competitor=${encodeURIComponent(competitor)}`;
+      if (search) url += `&search=${encodeURIComponent(search)}`;
+
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Content API failed');
+      const items = await res.json();
+
+      if (!items || items.length === 0) {
+        tableWrap.style.display = 'none';
+        emptyEl.style.display = 'block';
+        paginationEl.innerHTML = '';
+        return;
+      }
+
+      tbody.innerHTML = '';
+      items.forEach(item => {
+        const tr = document.createElement('tr');
+        const isOutlier = item.outlier_score && item.outlier_score >= 3.0;
+        const scoreBadge = isOutlier
+          ? `<span class="badge-outlier-sm">${item.outlier_score}×</span>`
+          : `<span class="badge-baseline-sm">${item.outlier_score ? item.outlier_score + '×' : '—'}</span>`;
+
+        const thumbBg = item.thumbnail_url
+          ? `background-image:url(${item.thumbnail_url});background-size:cover;background-position:center;`
+          : 'background:#1c2530;';
+
+        const caption = item.caption
+          ? (item.caption.length > 80 ? item.caption.slice(0, 80) + '…' : item.caption)
+          : '—';
+
+        tr.innerHTML = `
+          <td>
+            <div class="lib-thumb" style="${thumbBg}" onclick="openAnalysisById(null,'${item.id}')" title="View Analysis">
+              <span class="lib-play-icon">▶</span>
+            </div>
+          </td>
+          <td>
+            <span class="row-user">
+              <span class="avatar" style="width:20px;height:20px;margin-right:7px;"></span>
+              <span style="font-size:12.5px; font-weight:600;">@${item.instagram_username || '—'}</span>
+            </span>
+          </td>
+          <td>
+            <span class="lib-caption" title="${(item.caption||'').replace(/"/g,'&quot;')}" onclick="openAnalysisById(null,'${item.id}')">${caption}</span>
+          </td>
+          <td class="mono" style="font-size:12px; white-space:nowrap;">${relativeAge(item.published_at)}</td>
+          <td class="mono" style="font-size:12px;">${formatMetric(item.view_count)}</td>
+          <td class="mono" style="font-size:12px;">${formatMetric(item.like_count)}</td>
+          <td class="mono" style="font-size:12px;">${formatMetric(item.comment_count)}</td>
+          <td>${scoreBadge}</td>
+          <td style="white-space:nowrap;">
+            <a class="lib-action-btn" href="#" onclick="openAnalysisById(event,'${item.id}')">View Analysis →</a>
+            <a class="lib-action-ig" href="${item.instagram_url || '#'}" target="_blank" rel="noopener">Instagram ↗</a>
+          </td>
+        `;
+        tbody.appendChild(tr);
+      });
+
+      // Pagination controls
+      paginationEl.innerHTML = '';
+      if (libPage > 1) {
+        const prev = document.createElement('button');
+        prev.className = 'btn'; prev.textContent = '← Prev';
+        prev.onclick = () => { libPage--; loadLibrary(); };
+        paginationEl.appendChild(prev);
+      }
+      const info = document.createElement('span');
+      info.textContent = `Page ${libPage} · ${items.length} items`;
+      paginationEl.appendChild(info);
+      if (items.length === LIB_LIMIT) {
+        const next = document.createElement('button');
+        next.className = 'btn'; next.textContent = 'Next →';
+        next.onclick = () => { libPage++; loadLibrary(); };
+        paginationEl.appendChild(next);
+      }
+    } catch (e) {
+      console.warn('Library load failed', e);
+      tbody.innerHTML = '<tr><td colspan="9" style="text-align:center; padding:24px; color:var(--ink-soft); font-size:12.5px;">Could not load content library. Is the server running?</td></tr>';
+    }
+  }
+
+
+  // Initial data loading
+  loadDashboard();
+  loadCompetitors();
+  loadOutliers();
+</script>
+</body>
+</html>

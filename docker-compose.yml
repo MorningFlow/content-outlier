@@ -1,0 +1,60 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: content_outlier_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgrespassword
+      POSTGRES_DB: content_outlier
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./schema.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d content_outlier"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  api:
+    build: .
+    container_name: content_outlier_api
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      DEBUG: "false"
+      DATABASE_URL: postgresql+psycopg://postgres:postgrespassword@postgres:5432/content_outlier
+      STORAGE_BACKEND: local
+      LOCAL_STORAGE_DIR: /app/media_storage
+    ports:
+      - "8000:8000"
+    volumes:
+      - media_volume:/app/media_storage
+
+  worker:
+    build: .
+    container_name: content_outlier_worker
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      APP_ENV: production
+      DATABASE_URL: postgresql+psycopg://postgres:postgrespassword@postgres:5432/content_outlier
+      STORAGE_BACKEND: local
+      LOCAL_STORAGE_DIR: /app/media_storage
+      DEFAULT_SCAN_INTERVAL_HOURS: 6
+    volumes:
+      - media_volume:/app/media_storage
+    command: ["python", "-m", "app.worker.runner"]
+
+volumes:
+  postgres_data:
+  media_volume:
